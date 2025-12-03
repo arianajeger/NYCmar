@@ -1,0 +1,130 @@
+st.set_page_config(page_title='NYC Marathon Results', layout='wide')
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f0f2f6 !important; /* Grey background */
+    }
+    h2, h3, h4, h5, h6 {
+        color: #1c1c84 !important; /* Navy Blue */
+    }
+    h1 {
+        color: #FFA500 !important; /* Orange */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True)
+
+
+st.title("🗽NYC Marathon")
+# Cargar datos con caché
+@st.cache_data
+def load_data():
+    url = "/content/drive/MyDrive/Ariana Data SET/NYC Marathon Results.csv"
+    df = pd.read_csv(url, encoding='latin-1')
+    df['Finish_Time'] = pd.to_timedelta(df['Finish Time'])
+    df['Hours'] = df['Finish_Time'].dt.total_seconds() / 3600
+    df['Minutes'] = df['Finish_Time'].dt.total_seconds() / 60
+    df = df[~df['Name'].str.lower().eq('anonymous')]
+
+    return df
+
+try:
+    df = load_data()
+    st.badge(f"Data Uploaded: {len(df)} ",
+        icon=":material/check:", color="green")
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
+
+tab0, tab1, tab2 = st.tabs(["Overall","Years", "Top Runners"])
+with tab0:
+    st.subheader("Overall Race Stats")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        total_runners = df['Name'].nunique()
+        st.metric("Total Runners", total_runners)
+
+    with col2:
+        avg_time = df['Hours'].mean()
+        st.metric("Average Finish Time", f"{avg_time:.2f} hours")
+
+    with col3:
+        avg_age = df['Age'].mean()
+        st.metric("Average Age", f"{avg_age:.2f}")
+
+    with col4:
+        total_countries = df['Country'].nunique()
+        st.metric("Total Countries", total_countries)
+
+    st.markdown("---")
+    st.image('/content/drive/MyDrive/Ariana Data SET/in-the-nycm-are-the-colors-separated-all-the-way-up-to-mile-v0-tm829odkdlrf1.jpeg.webp',caption= 'Course Map')
+
+with tab1:
+    st.subheader("Marathon Statistics Overtime")
+
+    gra1_col1, gra1_col2 = st.columns(2)
+
+    with gra1_col1:
+        age_range = st.slider("Select the age range", int(df['Age'].min()), int(df['Age'].max()), (int(df['Age'].min()), int(df['Age'].max())),step=1)
+    with gra1_col2:
+        metric_type = st.selectbox("Results ", ["Name", "Hours", "Country"])
+
+    time_grouping = 'Year'
+    df_filtered = df[(df['Age'] >= age_range[0]) & (df['Age'] <= age_range[1])]
+
+    df_time = df_filtered.groupby(time_grouping).agg({
+        'Name': 'nunique',
+        'Hours': 'mean',
+        'Country': 'nunique'
+    }).reset_index()
+    fig_time = px.line(df_time, x=time_grouping, y=metric_type,
+                        title=f"",
+                        markers=True)
+    fig_time.update_traces(line_color='#FFA500', line_width=3)
+    fig_time.update_layout(hovermode='x unified')
+
+    if time_grouping == "Year":
+        fig_time.update_xaxes(
+            dtick="M12",
+            tickformat="%Y"
+        )
+    st.plotly_chart(fig_time, use_container_width=True)
+
+with tab2:
+    st.subheader("Top 10 Runners🏅")
+    gra2_col1, gra2_col2, gra2_col3 = st.columns(3)
+
+    with gra2_col1:
+        age_range = st.slider("Select the age range", int(df['Age'].min()), int(df['Age'].max()), (int(df['Age'].min()), int(df['Age'].max())),step=1, key="age_tab2")
+    with gra2_col2:
+        country = st.selectbox("Select Country", ["All"] + sorted(df['Country'].dropna().unique()))
+    with gra2_col3:
+        year = st.selectbox("Select Year", ["All"] + sorted(df['Year'].unique()), key="year_tab2")
+
+        df_filtered = df[
+          (df['Age'] >= age_range[0]) &
+          (df['Age'] <= age_range[1])
+          ]
+
+    if year != "All":
+        df_filtered = df_filtered[df_filtered['Year'] == year]
+
+    if country != "All":
+        df_filtered = df_filtered[df_filtered['Country'] == country]
+
+    top_runners = df_filtered.sort_values("Finish Time").head(10)
+
+    fig = px.bar(
+      top_runners,
+      y="Name",
+      x="Finish Time",
+      orientation="h",
+      color="Name",
+      title=f"Top 10 Runners by Finish Time ({year}, {country})",
+      labels={"Finish Time": "Finish Time (lower is better)", "Name": "Runner"},
+  )
+
+    fig.update_layout(yaxis={'categoryorder':'total ascending'})
+    st.plotly_chart(fig, use_container_width=True)
